@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Block de Notas HTML - Fondo Oscuro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      background-color: #121212;
+      color: #eee;
+      font-family: 'Consolas', monospace, monospace;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 15px;
+      background-color: #1e1e1e;
+      color: #1DB954;
+      font-weight: bold;
+      font-size: 1.5rem;
+      text-align: center;
+      user-select: none;
+    }
+
+    #editor {
+      flex: 1;
+      margin: 10px;
+      border-radius: 8px;
+      background-color: #1e1e1e;
+      color: #eee;
+      font-family: monospace;
+      font-size: 1rem;
+      line-height: 1.4em;
+      padding: 15px;
+      outline: none;
+      overflow: auto;
+      white-space: pre-wrap;
+      tab-size: 2;
+    }
+
+    /* Resaltado básico para etiquetas HTML */
+    .tag {
+      color: #569CD6;
+    }
+    .attribute {
+      color: #9CDCFE;
+    }
+    .value {
+      color: #CE9178;
+    }
+    .comment {
+      color: #6A9955;
+      font-style: italic;
+    }
+
+    /* Botón para limpiar */
+    #btnClear {
+      background: #1DB954;
+      border: none;
+      color: #121212;
+      font-weight: bold;
+      padding: 12px 20px;
+      margin: 10px auto;
+      border-radius: 8px;
+      cursor: pointer;
+      max-width: 150px;
+    }
+    #btnClear:hover {
+      background: #17a344;
+    }
+  </style>
+</head>
+<body>
+
+  <header>Block de Notas HTML - Fondo Oscuro</header>
+
+  <pre id="editor" contenteditable spellcheck="false" aria-label="Editor de código HTML"></pre>
+
+  <button id="btnClear" title="Limpiar editor">🧹 Limpiar</button>
+
+  <script>
+    const editor = document.getElementById('editor');
+    const btnClear = document.getElementById('btnClear');
+
+    // Función para escapar caracteres HTML para mostrar en el editor
+    function escapeHtml(text) {
+      return text.replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;");
+    }
+
+    // Función para aplicar resaltado básico (tags, atributos, valores y comentarios)
+    function highlightHTML(code) {
+      // Escapar HTML para evitar ejecución
+      code = escapeHtml(code);
+
+      // Comentarios <!-- ... -->
+      code = code.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="comment">$1</span>');
+
+      // Etiquetas de apertura y cierre <tag ...>
+      code = code.replace(/(&lt;\/?)([\w\-]+)([^&]*?)(&gt;)/g, function(match, p1, p2, p3, p4){
+        // Resaltar atributos y valores dentro de p3
+        let attrs = p3.replace(/([\w-:]+)(=)("[^"]*"|'[^']*')/g, function(m, attr, eq, val){
+          return `<span class="attribute">${attr}</span>${eq}<span class="value">${val}</span>`;
+        });
+        return `<span class="tag">${p1}${p2}</span>${attrs}<span class="tag">${p4}</span>`;
+      });
+
+      return code;
+    }
+
+    // Guardar y restaurar cursor
+    function saveCursorPosition(context) {
+      let selection = window.getSelection();
+      if (selection.rangeCount === 0) return null;
+      let range = selection.getRangeAt(0);
+      let preSelectionRange = range.cloneRange();
+      preSelectionRange.selectNodeContents(context);
+      preSelectionRange.setEnd(range.startContainer, range.startOffset);
+      let start = preSelectionRange.toString().length;
+      return start;
+    }
+
+    function restoreCursorPosition(context, pos) {
+      let nodeStack = [context], node, foundStart = false, charIndex = 0, range = document.createRange();
+      range.setStart(context, 0);
+      range.collapse(true);
+      while ((node = nodeStack.pop())) {
+        if (node.nodeType === 3) { // Text node
+          let nextCharIndex = charIndex + node.length;
+          if (!foundStart && pos >= charIndex && pos <= nextCharIndex) {
+            range.setStart(node, pos - charIndex);
+            range.collapse(true);
+            foundStart = true;
+            break;
+          }
+          charIndex = nextCharIndex;
+        } else {
+          let i = node.childNodes.length;
+          while (i--) {
+            nodeStack.push(node.childNodes[i]);
+          }
+        }
+      }
+      let sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    // Evento de input para resaltar mientras escribes
+    editor.addEventListener('input', () => {
+      let pos = saveCursorPosition(editor);
+      let code = editor.textContent;
+      editor.innerHTML = highlightHTML(code);
+      restoreCursorPosition(editor, pos);
+    });
+
+    // Botón limpiar
+    btnClear.addEventListener('click', () => {
+      editor.textContent = '';
+      editor.focus();
+    });
+
+    // Texto inicial ejemplo
+    editor.textContent = `<!-- Escribe tu código HTML aquí -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+`;
+
+    // Aplicar resaltado al cargar
+    editor.innerHTML = highlightHTML(editor.textContent);
+  </script>
+</body>
+</html>
