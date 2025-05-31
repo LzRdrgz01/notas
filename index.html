@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <title>Block de Notas HTML - Fondo Oscuro</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  
-  <!-- Favicon SVG nota -->
+
+  <!-- Favicon SVG -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%231DB954%22><path d=%22M3 3h18v18H3V3zm2 2v14h14V5H5zM7 7h10v2H7V7zm0 4h7v2H7v-2z%22/></svg>">
 
   <style>
@@ -14,7 +14,7 @@
       height: 100vh;
       background-color: #121212;
       color: #eee;
-      font-family: 'Consolas', monospace, monospace;
+      font-family: 'Consolas', monospace;
       display: flex;
       flex-direction: column;
     }
@@ -45,34 +45,30 @@
       tab-size: 2;
     }
 
-    /* Resaltado básico para etiquetas HTML */
-    .tag {
-      color: #569CD6;
-    }
-    .attribute {
-      color: #9CDCFE;
-    }
-    .value {
-      color: #CE9178;
-    }
-    .comment {
-      color: #6A9955;
-      font-style: italic;
+    .tag { color: #569CD6; }
+    .attribute { color: #9CDCFE; }
+    .value { color: #CE9178; }
+    .comment { color: #6A9955; font-style: italic; }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px;
+      background: #1e1e1e;
     }
 
-    /* Botón para limpiar */
-    #btnClear {
+    .controls button {
       background: #1DB954;
       border: none;
       color: #121212;
       font-weight: bold;
-      padding: 12px 20px;
-      margin: 10px auto;
+      padding: 10px 18px;
       border-radius: 8px;
       cursor: pointer;
-      max-width: 150px;
     }
-    #btnClear:hover {
+
+    .controls button:hover {
       background: #17a344;
     }
   </style>
@@ -83,41 +79,41 @@
 
   <pre id="editor" contenteditable spellcheck="false" aria-label="Editor de código HTML"></pre>
 
-  <button id="btnClear" title="Limpiar editor">🧹 Limpiar</button>
+  <div class="controls">
+    <button id="btnUndo">🔙 Deshacer</button>
+    <button id="btnRedo">🔜 Rehacer</button>
+    <button id="btnClear">🧹 Limpiar</button>
+  </div>
 
   <script>
     const STORAGE_KEY = 'blocknotas_html_content';
     const editor = document.getElementById('editor');
     const btnClear = document.getElementById('btnClear');
+    const btnUndo = document.getElementById('btnUndo');
+    const btnRedo = document.getElementById('btnRedo');
 
-    // Función para escapar caracteres HTML para mostrar en el editor
+    let undoStack = [];
+    let redoStack = [];
+    let isUpdating = false;
+
     function escapeHtml(text) {
       return text.replace(/&/g, "&amp;")
                  .replace(/</g, "&lt;")
                  .replace(/>/g, "&gt;");
     }
 
-    // Función para aplicar resaltado básico (tags, atributos, valores y comentarios)
     function highlightHTML(code) {
-      // Escapar HTML para evitar ejecución
       code = escapeHtml(code);
-
-      // Comentarios <!-- ... -->
       code = code.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="comment">$1</span>');
-
-      // Etiquetas de apertura y cierre <tag ...>
       code = code.replace(/(&lt;\/?)([\w\-]+)([^&]*?)(&gt;)/g, function(match, p1, p2, p3, p4){
-        // Resaltar atributos y valores dentro de p3
         let attrs = p3.replace(/([\w-:]+)(=)("[^"]*"|'[^']*')/g, function(m, attr, eq, val){
           return `<span class="attribute">${attr}</span>${eq}<span class="value">${val}</span>`;
         });
         return `<span class="tag">${p1}${p2}</span>${attrs}<span class="tag">${p4}</span>`;
       });
-
       return code;
     }
 
-    // Guardar y restaurar cursor
     function saveCursorPosition(context) {
       let selection = window.getSelection();
       if (selection.rangeCount === 0) return null;
@@ -125,29 +121,26 @@
       let preSelectionRange = range.cloneRange();
       preSelectionRange.selectNodeContents(context);
       preSelectionRange.setEnd(range.startContainer, range.startOffset);
-      let start = preSelectionRange.toString().length;
-      return start;
+      return preSelectionRange.toString().length;
     }
 
     function restoreCursorPosition(context, pos) {
-      let nodeStack = [context], node, foundStart = false, charIndex = 0, range = document.createRange();
+      let nodeStack = [context], node, found = false, charIndex = 0, range = document.createRange();
       range.setStart(context, 0);
       range.collapse(true);
       while ((node = nodeStack.pop())) {
-        if (node.nodeType === 3) { // Text node
+        if (node.nodeType === 3) {
           let nextCharIndex = charIndex + node.length;
-          if (!foundStart && pos >= charIndex && pos <= nextCharIndex) {
+          if (!found && pos >= charIndex && pos <= nextCharIndex) {
             range.setStart(node, pos - charIndex);
             range.collapse(true);
-            foundStart = true;
+            found = true;
             break;
           }
           charIndex = nextCharIndex;
         } else {
           let i = node.childNodes.length;
-          while (i--) {
-            nodeStack.push(node.childNodes[i]);
-          }
+          while (i--) nodeStack.push(node.childNodes[i]);
         }
       }
       let sel = window.getSelection();
@@ -155,38 +148,54 @@
       sel.addRange(range);
     }
 
-    // Evento de input para resaltar mientras escribes y guardar en localStorage
-    editor.addEventListener('input', () => {
+    function updateContent(newContent, pushToStack = true) {
+      if (pushToStack && !isUpdating) {
+        undoStack.push(editor.textContent);
+        redoStack = [];
+      }
+      isUpdating = true;
       let pos = saveCursorPosition(editor);
-      let code = editor.textContent;
-      // Guardar sin formato en localStorage
-      localStorage.setItem(STORAGE_KEY, code);
-      editor.innerHTML = highlightHTML(code);
+      localStorage.setItem(STORAGE_KEY, newContent);
+      editor.innerHTML = highlightHTML(newContent);
       restoreCursorPosition(editor, pos);
+      isUpdating = false;
+    }
+
+    editor.addEventListener('input', () => {
+      if (!isUpdating) updateContent(editor.textContent);
     });
 
-    // Botón limpiar
     btnClear.addEventListener('click', () => {
+      undoStack.push(editor.textContent);
       editor.textContent = '';
       localStorage.removeItem(STORAGE_KEY);
+      redoStack = [];
       editor.focus();
     });
 
-    // Cargar contenido guardado o texto inicial
-    let contenidoGuardado = localStorage.getItem(STORAGE_KEY);
-    if (contenidoGuardado) {
-      editor.textContent = contenidoGuardado;
+    btnUndo.addEventListener('click', () => {
+      if (undoStack.length > 0) {
+        redoStack.push(editor.textContent);
+        const previous = undoStack.pop();
+        updateContent(previous, false);
+      }
+    });
+
+    btnRedo.addEventListener('click', () => {
+      if (redoStack.length > 0) {
+        undoStack.push(editor.textContent);
+        const next = redoStack.pop();
+        updateContent(next, false);
+      }
+    });
+
+    let saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      editor.textContent = saved;
     } else {
-      editor.textContent = `<!-- Escribe tu código HTML aquí -->
-
-
-
-
-
-`;
+      editor.textContent = ``;
     }
 
-    // Aplicar resaltado al cargar
     editor.innerHTML = highlightHTML(editor.textContent);
   </script>
 </body>
