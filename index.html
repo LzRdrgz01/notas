@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <title>Block de Notas HTML - Fondo Oscuro</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  
+  <!-- Favicon SVG nota -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%231DB954%22><path d=%22M3 3h18v18H3V3zm2 2v14h14V5H5zM7 7h10v2H7V7zm0 4h7v2H7v-2z%22/></svg>">
+
   <style>
     body {
       margin: 0;
@@ -82,6 +86,7 @@
   <button id="btnClear" title="Limpiar editor">🧹 Limpiar</button>
 
   <script>
+    const STORAGE_KEY = 'blocknotas_html_content';
     const editor = document.getElementById('editor');
     const btnClear = document.getElementById('btnClear');
 
@@ -150,10 +155,12 @@
       sel.addRange(range);
     }
 
-    // Evento de input para resaltar mientras escribes
+    // Evento de input para resaltar mientras escribes y guardar en localStorage
     editor.addEventListener('input', () => {
       let pos = saveCursorPosition(editor);
       let code = editor.textContent;
+      // Guardar sin formato en localStorage
+      localStorage.setItem(STORAGE_KEY, code);
       editor.innerHTML = highlightHTML(code);
       restoreCursorPosition(editor, pos);
     });
@@ -161,28 +168,23 @@
     // Botón limpiar
     btnClear.addEventListener('click', () => {
       editor.textContent = '';
+      localStorage.removeItem(STORAGE_KEY);
       editor.focus();
     });
 
-    // Texto inicial ejemplo
-    editor.textContent = `<!-- Escribe tu código HTML aquí -->
-
-
-
-
-
-
-
-
-
-
-
+    // Cargar contenido guardado o texto inicial
+    let contenidoGuardado = localStorage.getItem(STORAGE_KEY);
+    if (contenidoGuardado) {
+      editor.textContent = contenidoGuardado;
+    } else {
+      editor.textContent = `<!-- Escribe tu código HTML aquí -->
 
 
 
 
 
 `;
+    }
 
     // Aplicar resaltado al cargar
     editor.innerHTML = highlightHTML(editor.textContent);
